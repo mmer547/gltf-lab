@@ -12,6 +12,15 @@ type SceneApi = {
   setWireframe: (value: boolean) => void;
   setAutoRotate: (value: boolean) => void;
   setExposure: (value: number) => void;
+  setLayerVisible: (id: string, value: boolean) => void;
+  setAllLayersVisible: (value: boolean) => void;
+};
+
+type SceneLayer = {
+  id: string;
+  name: string;
+  detail: string;
+  visible: boolean;
 };
 
 declare global {
@@ -40,11 +49,13 @@ export function GLTFViewer() {
   const [exposure, setExposure] = useState(1.15);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
+  const [layers, setLayers] = useState<SceneLayer[]>([]);
 
   const loadFile = useCallback((file?: File) => {
     if (!file) return;
     if (!/\.(glb|gltf)$/i.test(file.name)) { setError(".GLB または .GLTF ファイルを選択してください"); return; }
     setError("");
+    setLayers([]);
     setName(file.name.replace(/\.(glb|gltf)$/i, "").toUpperCase());
     setMeta(`${(file.size / 1048576).toFixed(2)} MB · ${file.name.split(".").pop()?.toUpperCase()}`);
     const localUrl = window.gltfDesktop?.localUrlForFile(file);
@@ -59,6 +70,7 @@ export function GLTFViewer() {
       }
       setError("");
       setDragging(false);
+      setLayers([]);
       setName(droppedName.replace(/\.(glb|gltf)$/i, "").toUpperCase());
       setMeta(`${(size / 1048576).toFixed(2)} MB · ${droppedName.split(".").pop()?.toUpperCase()}`);
       api.current?.load(new File([], droppedName), url);
@@ -147,7 +159,47 @@ export function GLTFViewer() {
           gltf.scene.userData.upAxis = "Z";
           disposeRoot(); root.add(gltf.scene);
           let count = 0;
-          root.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) { const g = m.geometry; count += g.index ? g.index.count / 3 : (g.attributes.position?.count || 0) / 3; m.castShadow = true; m.receiveShadow = true; } });
+          const detectedLayers: SceneLayer[] = [];
+          const usedNames = new Map<string, number>();
+          gltf.scene.traverse((object) => {
+            const renderable = object as THREE.Mesh;
+            if (!renderable.geometry) return;
+
+            const geometry = renderable.geometry;
+            const positions = geometry.attributes.position?.count || 0;
+            const elementCount = geometry.index?.count || positions;
+            const isLine = (object as THREE.Line).isLine === true;
+            const isPoints = (object as THREE.Points).isPoints === true;
+            const kind = isLine ? "LINES" : isPoints ? "POINTS" : "MESH";
+            const units = isLine ? Math.round(elementCount / 2) : isPoints ? positions : Math.round(elementCount / 3);
+            const suffix = isLine ? "SEGMENTS" : isPoints ? "POINTS" : "TRIS";
+
+            if (!isLine && !isPoints) {
+              count += elementCount / 3;
+              const materials = Array.isArray(renderable.material) ? renderable.material : renderable.material ? [renderable.material] : [];
+              materials.forEach((material) => {
+                material.side = THREE.DoubleSide;
+                material.needsUpdate = true;
+              });
+            }
+            renderable.castShadow = !isLine && !isPoints;
+            renderable.receiveShadow = !isLine && !isPoints;
+
+            const fallbackName = kind === "MESH" ? "Mesh" : kind === "LINES" ? "Lines" : "Points";
+            const baseName = object.name.trim() || `${fallbackName} ${detectedLayers.length + 1}`;
+            const duplicateIndex = (usedNames.get(baseName) || 0) + 1;
+            usedNames.set(baseName, duplicateIndex);
+            const displayName = duplicateIndex === 1 ? baseName : `${baseName} (${duplicateIndex})`;
+            const formattedUnits = units >= 1000 ? `${(units / 1000).toFixed(1)}K` : `${units}`;
+
+            detectedLayers.push({
+              id: object.uuid,
+              name: displayName,
+              detail: `${kind} · ${formattedUnits} ${suffix}`,
+              visible: object.visible,
+            });
+          });
+          setLayers(detectedLayers);
           setTriangles(count >= 1000 ? `${(count / 1000).toFixed(1)}K` : `${Math.round(count)}`);
           frameObject(); if (shouldRevoke) URL.revokeObjectURL(url);
         }, undefined, () => { setError(localUrl ? "モデルまたは参照ファイルを読み込めませんでした" : "モデルを読み込めませんでした。外部参照のないGLBをお試しください"); if (shouldRevoke) URL.revokeObjectURL(url); });
@@ -157,6 +209,15 @@ export function GLTFViewer() {
       setWireframe(value) { setMaterials((m) => { if ("wireframe" in m) (m as THREE.MeshStandardMaterial).wireframe = value; }); },
       setAutoRotate(value) { controls.autoRotate = value; },
       setExposure(value) { renderer.toneMappingExposure = value; },
+      setLayerVisible(id, value) {
+        const object = root.getObjectByProperty("uuid", id);
+        if (object) object.visible = value;
+      },
+      setAllLayersVisible(value) {
+        root.traverse((object) => {
+          if ((object as THREE.Mesh).geometry) object.visible = value;
+        });
+      },
     };
 
     const resize = () => {
@@ -174,6 +235,18 @@ export function GLTFViewer() {
   const toggleGrid = () => setGrid(v => { api.current?.setGrid(!v); return !v; });
   const toggleWire = () => setWireframe(v => { api.current?.setWireframe(!v); return !v; });
   const toggleRotate = () => setAutoRotate(v => { api.current?.setAutoRotate(!v); return !v; });
+  const toggleLayer = (id: string) => {
+    setLayers(current => current.map(layer => {
+      if (layer.id !== id) return layer;
+      const visible = !layer.visible;
+      api.current?.setLayerVisible(id, visible);
+      return { ...layer, visible };
+    }));
+  };
+  const setAllLayers = (visible: boolean) => {
+    api.current?.setAllLayersVisible(visible);
+    setLayers(current => current.map(layer => ({ ...layer, visible })));
+  };
 
   return (
     <main className="app-shell">
@@ -186,7 +259,23 @@ export function GLTFViewer() {
           <div className="panel-label">SCENE</div>
           <div className="scene-item active"><span className="cube-icon">◇</span><div><b>{name}</b><small>{meta}</small></div><em>●</em></div>
           <div className="empty-scene"><span>＋</span><p>Drop another model<br/>to replace the scene</p></div>
-          <div className="panel-footer"><span>1 OBJECT</span><span>{triangles} TRIS</span></div>
+          {layers.length > 0 && (
+            <div className="layers-panel">
+              <div className="layers-heading">
+                <span>LAYERS</span>
+                <div><button onClick={() => setAllLayers(true)}>ALL</button><button onClick={() => setAllLayers(false)}>NONE</button></div>
+              </div>
+              <div className="layers-list">
+                {layers.map(layer => (
+                  <button key={layer.id} className={`layer-item ${layer.visible ? "visible" : "hidden"}`} onClick={() => toggleLayer(layer.id)} aria-pressed={layer.visible}>
+                    <span className="layer-eye" aria-hidden="true">{layer.visible ? "●" : "○"}</span>
+                    <span><b>{layer.name}</b><small>{layer.detail}</small></span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="panel-footer"><span>{layers.length || 1} OBJECT{layers.length === 1 ? "" : "S"}</span><span>{triangles} TRIS</span></div>
         </aside>
 
         <div className={`viewport ${dragging ? "dragging" : ""}`}

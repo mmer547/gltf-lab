@@ -55,7 +55,9 @@ aside { background:var(--panel); min-width:0; position:relative; }
 .viewport::after { content:""; position:absolute; inset:0; pointer-events:none; background:radial-gradient(circle at center,transparent 45%,#050607aa 130%); }
 .viewport.dragging::before { content:""; position:absolute; z-index:5; inset:14px; border:1px dashed var(--acid); background:#d8ff3e0b; }
 .viewport-top { position:absolute; z-index:2; top:14px; left:16px; display:flex; gap:6px; }
-.viewport-top span { padding:6px 8px; color:#767e88; border:1px solid #262c32; background:#111419bb; font:8px var(--font-geist-mono),monospace; letter-spacing:.1em; }
+.viewport-top span,.viewport-top button { padding:6px 8px; color:#767e88; border:1px solid #262c32; background:#111419bb; font:8px var(--font-geist-mono),monospace; letter-spacing:.1em; }
+.viewport-top button { cursor:pointer; }
+.viewport-top button:hover { color:var(--acid); border-color:#596522; }
 .axis { position:absolute; z-index:2; top:17px; right:18px; width:52px; height:52px; color:#fff; font:8px var(--font-geist-mono),monospace; }
 .axis b { position:absolute; width:18px; height:18px; display:grid; place-items:center; border-radius:50%; }
 .axis .z { left:17px; top:0; color:#6e98da; border:1px solid #425d84; }.axis .x{right:0;bottom:0;color:#e06a6a;border:1px solid #7d4646}.axis .y{left:0;bottom:0;color:#9bd884;border:1px solid #548052}

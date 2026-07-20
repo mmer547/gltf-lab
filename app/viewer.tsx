@@ -11,6 +11,7 @@ type SceneApi = {
   setGrid: (value: boolean) => void;
   setWireframe: (value: boolean) => void;
   setAutoRotate: (value: boolean) => void;
+  setPerspective: (value: boolean) => void;
   setExposure: (value: number) => void;
   setLayerVisible: (id: string, value: boolean) => void;
   setAllLayersVisible: (value: boolean) => void;
@@ -46,6 +47,7 @@ export function GLTFViewer() {
   const [grid, setGrid] = useState(true);
   const [wireframe, setWireframe] = useState(false);
   const [autoRotate, setAutoRotate] = useState(false);
+  const [perspective, setPerspective] = useState(false);
   const [exposure, setExposure] = useState(1.15);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
@@ -92,14 +94,59 @@ export function GLTFViewer() {
     scene.up.set(0, 0, 1);
     scene.background = new THREE.Color(0x090b0d);
     scene.fog = new THREE.FogExp2(0x090b0d, 0.038);
-    const camera = new THREE.PerspectiveCamera(38, 1, .05, 100);
+    const perspectiveFov = 38;
+    let viewportAspect = 1;
+    let camera: THREE.PerspectiveCamera | THREE.OrthographicCamera = new THREE.OrthographicCamera(-2.5 * viewportAspect, 2.5 * viewportAspect, 2.5, -2.5, .05, 100);
     camera.up.set(0, 0, 1);
     camera.position.set(4.8, 6.2, 3.2);
-    const controls = new OrbitControls(camera, canvas);
-    controls.enableDamping = true;
-    controls.dampingFactor = .06;
-    controls.autoRotate = false;
-    controls.autoRotateSpeed = .65;
+    const createControls = (activeCamera: THREE.PerspectiveCamera | THREE.OrthographicCamera, target = new THREE.Vector3(), autoRotate = false) => {
+      const nextControls = new OrbitControls(activeCamera, canvas);
+      nextControls.enableDamping = true;
+      nextControls.dampingFactor = .06;
+      nextControls.autoRotate = autoRotate;
+      nextControls.autoRotateSpeed = .65;
+      nextControls.target.copy(target);
+      nextControls.update();
+      return nextControls;
+    };
+    let controls = createControls(camera);
+
+    const perspectiveHalfHeight = (distance: number) => distance * Math.tan(THREE.MathUtils.degToRad(perspectiveFov / 2));
+    const updateOrthographicFrustum = (orthographic: THREE.OrthographicCamera, halfHeight: number) => {
+      orthographic.left = -halfHeight * viewportAspect;
+      orthographic.right = halfHeight * viewportAspect;
+      orthographic.top = halfHeight;
+      orthographic.bottom = -halfHeight;
+      orthographic.updateProjectionMatrix();
+    };
+    const changeProjection = (usePerspective: boolean) => {
+      if (usePerspective === (camera instanceof THREE.PerspectiveCamera)) return;
+
+      const target = controls.target.clone();
+      const direction = camera.position.clone().sub(target);
+      if (direction.lengthSq() === 0) direction.set(1, 1, 1);
+      direction.normalize();
+      const autoRotate = controls.autoRotate;
+      let nextCamera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
+
+      if (usePerspective) {
+        const orthographic = camera as THREE.OrthographicCamera;
+        const halfHeight = (orthographic.top - orthographic.bottom) / (2 * orthographic.zoom);
+        const distance = halfHeight / Math.tan(THREE.MathUtils.degToRad(perspectiveFov / 2));
+        nextCamera = new THREE.PerspectiveCamera(perspectiveFov, viewportAspect, camera.near, camera.far);
+        nextCamera.position.copy(target).addScaledVector(direction, distance);
+      } else {
+        const distance = Math.max(camera.position.distanceTo(target), .001);
+        const halfHeight = perspectiveHalfHeight(distance);
+        nextCamera = new THREE.OrthographicCamera(-halfHeight * viewportAspect, halfHeight * viewportAspect, halfHeight, -halfHeight, camera.near, camera.far);
+        nextCamera.position.copy(camera.position);
+      }
+
+      nextCamera.up.copy(camera.up);
+      controls.dispose();
+      camera = nextCamera;
+      controls = createControls(camera, target, autoRotate);
+    };
 
     scene.add(new THREE.HemisphereLight(0x9bb8ff, 0x111318, 1.4));
     const key = new THREE.DirectionalLight(0xffffff, 5);
@@ -141,7 +188,15 @@ export function GLTFViewer() {
       root.position.sub(center);
       const max = Math.max(size.x, size.y, size.z) || 1;
       camera.position.set(max * 1.55, max * 1.9, max * 1.05);
-      camera.near = max / 100; camera.far = max * 100; camera.updateProjectionMatrix();
+      camera.near = max / 100;
+      camera.far = max * 100;
+      if (camera instanceof THREE.PerspectiveCamera) {
+        camera.aspect = viewportAspect;
+        camera.updateProjectionMatrix();
+      } else {
+        camera.zoom = 1;
+        updateOrthographicFrustum(camera, perspectiveHalfHeight(camera.position.length()));
+      }
       controls.target.set(0, 0, 0); controls.update();
       gridHelper.position.z = -size.z / 2 - .06; floor.position.z = gridHelper.position.z - .02;
     };
@@ -208,6 +263,7 @@ export function GLTFViewer() {
       setGrid(value) { gridHelper.visible = value; floor.visible = value; },
       setWireframe(value) { setMaterials((m) => { if ("wireframe" in m) (m as THREE.MeshStandardMaterial).wireframe = value; }); },
       setAutoRotate(value) { controls.autoRotate = value; },
+      setPerspective(value) { changeProjection(value); },
       setExposure(value) { renderer.toneMappingExposure = value; },
       setLayerVisible(id, value) {
         const object = root.getObjectByProperty("uuid", id);
@@ -223,7 +279,13 @@ export function GLTFViewer() {
     const resize = () => {
       const parent = canvas.parentElement!;
       renderer.setSize(parent.clientWidth, parent.clientHeight, false);
-      camera.aspect = parent.clientWidth / parent.clientHeight; camera.updateProjectionMatrix();
+      viewportAspect = parent.clientWidth / Math.max(parent.clientHeight, 1);
+      if (camera instanceof THREE.PerspectiveCamera) {
+        camera.aspect = viewportAspect;
+        camera.updateProjectionMatrix();
+      } else {
+        updateOrthographicFrustum(camera, (camera.top - camera.bottom) / 2);
+      }
     };
     const observer = new ResizeObserver(resize); observer.observe(canvas.parentElement!); resize();
     let frame = 0;
@@ -235,6 +297,7 @@ export function GLTFViewer() {
   const toggleGrid = () => setGrid(v => { api.current?.setGrid(!v); return !v; });
   const toggleWire = () => setWireframe(v => { api.current?.setWireframe(!v); return !v; });
   const toggleRotate = () => setAutoRotate(v => { api.current?.setAutoRotate(!v); return !v; });
+  const togglePerspective = () => setPerspective(v => { api.current?.setPerspective(!v); return !v; });
   const toggleLayer = (id: string) => {
     setLayers(current => current.map(layer => {
       if (layer.id !== id) return layer;
@@ -283,7 +346,7 @@ export function GLTFViewer() {
           onDragLeave={() => setDragging(false)}
           onDrop={(e) => { e.preventDefault(); setDragging(false); loadFile(e.dataTransfer.files[0]); }}>
           <canvas ref={canvasRef} aria-label="3D model viewport" />
-          <div className="viewport-top"><span>PERSPECTIVE</span><span>SHADED</span></div>
+          <div className="viewport-top"><button aria-pressed={perspective} onClick={togglePerspective}>{perspective ? "PERSPECTIVE" : "ORTHOGRAPHIC"}</button><span>SHADED</span></div>
           <div className="axis" aria-label="Z-up coordinate system"><b className="z">Z</b><b className="x">X</b><b className="y">Y</b></div>
           <div className="drop-hint"><strong>{dragging ? "RELEASE TO LOAD" : "DROP GLB / GLTF"}</strong><span>or use Open Model</span></div>
           {error && <div className="error-toast">{error}<button onClick={() => setError("")}>×</button></div>}
@@ -292,7 +355,7 @@ export function GLTFViewer() {
 
         <aside className="right-panel">
           <div className="panel-label">INSPECTOR</div>
-          <section><h3>DISPLAY</h3><Toggle label="Grid floor" active={grid} onClick={toggleGrid}/><Toggle label="Wireframe" active={wireframe} onClick={toggleWire}/><Toggle label="Auto rotate" active={autoRotate} onClick={toggleRotate}/></section>
+          <section><h3>DISPLAY</h3><Toggle label="Perspective" active={perspective} onClick={togglePerspective}/><Toggle label="Grid floor" active={grid} onClick={toggleGrid}/><Toggle label="Wireframe" active={wireframe} onClick={toggleWire}/><Toggle label="Auto rotate" active={autoRotate} onClick={toggleRotate}/></section>
           <section><h3>LIGHTING</h3><label className="range-label"><span>Exposure</span><output>{exposure.toFixed(2)}</output></label><input type="range" min="0.35" max="2.2" step="0.05" value={exposure} onChange={(e) => { const v = +e.target.value; setExposure(v); api.current?.setExposure(v); }}/><div className="environment"><span className="env-preview"/><div><b>STUDIO SOFT</b><small>Neutral HDRI</small></div><button>›</button></div></section>
           <section><h3>MODEL INFO</h3><dl><div><dt>Format</dt><dd>{meta.includes("GLTF") ? "glTF 2.0" : meta.includes("GLB") ? "Binary glTF" : "Generated"}</dd></div><div><dt>Up axis</dt><dd>Z</dd></div><div><dt>Triangles</dt><dd>{triangles}</dd></div><div><dt>Renderer</dt><dd>WebGL</dd></div></dl></section>
           <button className="reset-button" onClick={() => api.current?.reset()}>RESET CAMERA <span>R</span></button>

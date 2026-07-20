@@ -5,6 +5,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
+type ViewPreset = "+X" | "-X" | "+Y" | "-Y" | "+Z" | "-Z" | "ISO";
+
 type SceneApi = {
   load: (file: File, localUrl?: string) => void;
   reset: () => void;
@@ -12,6 +14,7 @@ type SceneApi = {
   setWireframe: (value: boolean) => void;
   setAutoRotate: (value: boolean) => void;
   setPerspective: (value: boolean) => void;
+  setView: (preset: ViewPreset) => void;
   setExposure: (value: number) => void;
   setLayerVisible: (id: string, value: boolean) => void;
   setAllLayersVisible: (value: boolean) => void;
@@ -48,6 +51,7 @@ export function GLTFViewer() {
   const [wireframe, setWireframe] = useState(false);
   const [autoRotate, setAutoRotate] = useState(false);
   const [perspective, setPerspective] = useState(false);
+  const [activeView, setActiveView] = useState<ViewPreset | null>(null);
   const [exposure, setExposure] = useState(1.15);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
@@ -99,6 +103,13 @@ export function GLTFViewer() {
     let camera: THREE.PerspectiveCamera | THREE.OrthographicCamera = new THREE.OrthographicCamera(-2.5 * viewportAspect, 2.5 * viewportAspect, 2.5, -2.5, .05, 100);
     camera.up.set(0, 0, 1);
     camera.position.set(4.8, 6.2, 3.2);
+    let viewTransition: {
+      startedAt: number;
+      startPosition: THREE.Vector3;
+      endPosition: THREE.Vector3;
+      startQuaternion: THREE.Quaternion;
+      endQuaternion: THREE.Quaternion;
+    } | null = null;
     const createControls = (activeCamera: THREE.PerspectiveCamera | THREE.OrthographicCamera, target = new THREE.Vector3(), autoRotate = false) => {
       const nextControls = new OrbitControls(activeCamera, canvas);
       nextControls.enableDamping = true;
@@ -107,6 +118,10 @@ export function GLTFViewer() {
       nextControls.autoRotateSpeed = .65;
       nextControls.target.copy(target);
       nextControls.update();
+      nextControls.addEventListener("start", () => {
+        viewTransition = null;
+        setActiveView(null);
+      });
       return nextControls;
     };
     let controls = createControls(camera);
@@ -121,6 +136,7 @@ export function GLTFViewer() {
     };
     const changeProjection = (usePerspective: boolean) => {
       if (usePerspective === (camera instanceof THREE.PerspectiveCamera)) return;
+      viewTransition = null;
 
       const target = controls.target.clone();
       const direction = camera.position.clone().sub(target);
@@ -146,6 +162,35 @@ export function GLTFViewer() {
       controls.dispose();
       camera = nextCamera;
       controls = createControls(camera, target, autoRotate);
+    };
+    const viewPresets: Record<ViewPreset, { direction: THREE.Vector3; up: THREE.Vector3 }> = {
+      "+X": { direction: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 0, 1) },
+      "-X": { direction: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1) },
+      "+Y": { direction: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(0, 0, 1) },
+      "-Y": { direction: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1) },
+      "+Z": { direction: new THREE.Vector3(0, -.0001, 1).normalize(), up: new THREE.Vector3(0, 0, 1) },
+      "-Z": { direction: new THREE.Vector3(0, .0001, -1).normalize(), up: new THREE.Vector3(0, 0, 1) },
+      ISO: { direction: new THREE.Vector3(1, 1, 1).normalize(), up: new THREE.Vector3(0, 0, 1) },
+    };
+    const changeView = (preset: ViewPreset) => {
+      const target = controls.target.clone();
+      const distance = Math.max(camera.position.distanceTo(target), .001);
+      const { direction, up } = viewPresets[preset];
+      const endPosition = target.clone().addScaledVector(direction, distance);
+      const endCamera = camera.clone() as THREE.PerspectiveCamera | THREE.OrthographicCamera;
+      endCamera.position.copy(endPosition);
+      endCamera.up.copy(up);
+      endCamera.lookAt(target);
+
+      controls.autoRotate = false;
+      viewTransition = {
+        startedAt: performance.now(),
+        startPosition: camera.position.clone(),
+        endPosition,
+        startQuaternion: camera.quaternion.clone(),
+        endQuaternion: endCamera.quaternion.clone(),
+      };
+      camera.up.copy(up);
     };
 
     scene.add(new THREE.HemisphereLight(0x9bb8ff, 0x111318, 1.4));
@@ -180,6 +225,8 @@ export function GLTFViewer() {
       }
     };
     const frameObject = () => {
+      viewTransition = null;
+      setActiveView(null);
       root.position.set(0, 0, 0);
       root.updateWorldMatrix(true, true);
       const box = new THREE.Box3().setFromObject(root);
@@ -262,8 +309,12 @@ export function GLTFViewer() {
       reset() { frameObject(); },
       setGrid(value) { gridHelper.visible = value; floor.visible = value; },
       setWireframe(value) { setMaterials((m) => { if ("wireframe" in m) (m as THREE.MeshStandardMaterial).wireframe = value; }); },
-      setAutoRotate(value) { controls.autoRotate = value; },
+      setAutoRotate(value) {
+        controls.autoRotate = value;
+        if (value) { viewTransition = null; setActiveView(null); }
+      },
       setPerspective(value) { changeProjection(value); },
+      setView(preset) { changeView(preset); },
       setExposure(value) { renderer.toneMappingExposure = value; },
       setLayerVisible(id, value) {
         const object = root.getObjectByProperty("uuid", id);
@@ -289,7 +340,22 @@ export function GLTFViewer() {
     };
     const observer = new ResizeObserver(resize); observer.observe(canvas.parentElement!); resize();
     let frame = 0;
-    const tick = () => { frame = requestAnimationFrame(tick); controls.update(); renderer.render(scene, camera); };
+    const tick = () => {
+      frame = requestAnimationFrame(tick);
+      if (viewTransition) {
+        const progress = Math.min((performance.now() - viewTransition.startedAt) / 250, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        camera.position.lerpVectors(viewTransition.startPosition, viewTransition.endPosition, eased);
+        camera.quaternion.copy(viewTransition.startQuaternion).slerp(viewTransition.endQuaternion, eased);
+        if (progress === 1) {
+          viewTransition = null;
+          controls.update();
+        }
+      } else {
+        controls.update();
+      }
+      renderer.render(scene, camera);
+    };
     tick();
     return () => { cancelAnimationFrame(frame); observer.disconnect(); controls.dispose(); disposeRoot(); renderer.dispose(); api.current = null; };
   }, []);
@@ -298,6 +364,12 @@ export function GLTFViewer() {
   const toggleWire = () => setWireframe(v => { api.current?.setWireframe(!v); return !v; });
   const toggleRotate = () => setAutoRotate(v => { api.current?.setAutoRotate(!v); return !v; });
   const togglePerspective = () => setPerspective(v => { api.current?.setPerspective(!v); return !v; });
+  const selectView = (preset: ViewPreset) => {
+    setAutoRotate(false);
+    api.current?.setAutoRotate(false);
+    setActiveView(preset);
+    api.current?.setView(preset);
+  };
   const toggleLayer = (id: string) => {
     setLayers(current => current.map(layer => {
       if (layer.id !== id) return layer;
@@ -348,6 +420,12 @@ export function GLTFViewer() {
           <canvas ref={canvasRef} aria-label="3D model viewport" />
           <div className="viewport-top"><button aria-pressed={perspective} onClick={togglePerspective}>{perspective ? "PERSPECTIVE" : "ORTHOGRAPHIC"}</button><span>SHADED</span></div>
           <div className="axis" aria-label="Z-up coordinate system"><b className="z">Z</b><b className="x">X</b><b className="y">Y</b></div>
+          <div className="view-presets" aria-label="View from axis direction">
+            {(["+X", "-X", "+Y", "-Y", "+Z", "-Z"] as ViewPreset[]).map((preset) => (
+              <button key={preset} title={`View from ${preset}`} aria-pressed={activeView === preset} className={activeView === preset ? "active" : ""} onClick={() => selectView(preset)}>{preset.replace("-", "−")}</button>
+            ))}
+            <button className={`iso ${activeView === "ISO" ? "active" : ""}`} title="Isometric view" aria-pressed={activeView === "ISO"} onClick={() => selectView("ISO")}>ISO</button>
+          </div>
           <div className="drop-hint"><strong>{dragging ? "RELEASE TO LOAD" : "DROP GLB / GLTF"}</strong><span>or use Open Model</span></div>
           {error && <div className="error-toast">{error}<button onClick={() => setError("")}>×</button></div>}
           <div className="view-tools"><button aria-label="Reset view" onClick={() => api.current?.reset()}>⌂</button><button aria-label="Toggle auto rotate" className={autoRotate ? "active" : ""} onClick={toggleRotate}>↻</button><button aria-label="Toggle grid" className={grid ? "active" : ""} onClick={toggleGrid}>#</button></div>

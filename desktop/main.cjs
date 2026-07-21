@@ -82,7 +82,7 @@ app.whenReady().then(async () => {
 
   const window = new BrowserWindow({
     width: 1440, height: 900, minWidth: 760, minHeight: 560,
-    backgroundColor: "#090b0d", autoHideMenuBar: true,
+    backgroundColor: "#f4f5f7", autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true, sandbox: true, nodeIntegration: false,

@@ -80,5 +80,27 @@ dl { margin:0; display:flex; flex-direction:column; gap:11px; }dl div{display:fl
 .reset-button { width:calc(100% - 32px); margin:17px 16px; padding:10px; border:1px solid #343a42; background:#15191d; font:700 9px var(--font-geist-mono),monospace; letter-spacing:.1em; cursor:pointer; }.reset-button:hover{border-color:#66717d}.reset-button span{float:right;color:#5f6871;border:1px solid #30363c;padding:1px 4px}
 footer { display:flex; align-items:center; justify-content:space-between; padding:0 14px; border-top:1px solid var(--line); background:#0c0f12; color:#5f6770; font:8px var(--font-geist-mono),monospace; letter-spacing:.1em; }
 .help { display:flex; align-items:center; gap:8px; }.help span{color:#90979f;border:1px solid #30363c;padding:3px 5px;margin-left:8px}
+.app-shell.light { --bg:#f4f5f7; --panel:#ffffff; --panel-2:#f4f5f7; --line:#d7dbe0; --muted:#65707c; --text:#1b2026; --acid:#789600; }
+.app-shell.light header,.app-shell.light footer { background:#ffffff; }
+.app-shell.light .brand-mark { border-color:#aeb5bd; }
+.app-shell.light .brand small,.app-shell.light .webgl { color:#626d78; }
+.app-shell.light .scene-item,.app-shell.light .environment { background:#f5f6f8; }
+.app-shell.light .cube-icon { background:#e7e9ec; color:#4c5661; }
+.app-shell.light .scene-item small,.app-shell.light .panel-label,.app-shell.light .layers-heading,.app-shell.light .right-panel h3 { color:#68737e; }
+.app-shell.light .layers-heading button,.app-shell.light .reset-button { border-color:#cbd0d6; background:#f5f6f8; color:#58636e; }
+.app-shell.light .layer-item { border-color:#e0e3e6; }
+.app-shell.light .layer-item:hover { background:#f0f2f4; }
+.app-shell.light .layer-item b,.app-shell.light .toggle,.app-shell.light .range-label,.app-shell.light dd { color:#343b43; }
+.app-shell.light .layer-item small,.app-shell.light dt,.app-shell.light .panel-footer { color:#6e7882; }
+.app-shell.light .viewport { background:#f4f5f7; }
+.app-shell.light .viewport::after { background:radial-gradient(circle at center,transparent 52%,#c8cdd455 135%); }
+.app-shell.light .viewport-top span,.app-shell.light .viewport-top button,.app-shell.light .view-presets,.app-shell.light .view-tools { color:#4f5964; border-color:#cbd0d6; background:#ffffffdd; }
+.app-shell.light .viewport-top button:hover,.app-shell.light .view-presets button:hover,.app-shell.light .view-presets button.active { color:#617900; border-color:#91a63e; }
+.app-shell.light .view-presets button { background:#f5f6f8; color:#56616c; border-color:#d4d8dd; }
+.app-shell.light .view-presets button:hover,.app-shell.light .view-presets button.active,.app-shell.light .view-tools button.active,.app-shell.light .view-tools button:hover { background:#e9ecdf; color:#617900; }
+.app-shell.light .drop-hint { color:#68737e; }.app-shell.light .drop-hint strong{color:#3f4851}
+.app-shell.light .toggle i { background:#d5d9dd; }.app-shell.light .toggle i b{background:#7c858e}.app-shell.light .toggle i.on{background:#a9bf5670}.app-shell.light .toggle i.on b{background:#6f8900}
+.app-shell.light .reset-button span,.app-shell.light .help span { color:#59636e; border-color:#cbd0d6; }
+.app-shell.light .right-panel { scrollbar-color:#c4c9cf #fff; }
 @media(max-width:850px){.workspace{grid-template-columns:minmax(0,1fr) 220px}.left-panel{display:none}.right-panel{border-left:1px solid var(--line)}.help{display:none}}
-@media(max-width:620px){.app-shell{grid-template-rows:58px minmax(0,1fr) 30px}.workspace{display:block;position:relative}.viewport{height:100%}.right-panel{position:absolute;right:8px;top:8px;width:200px;max-height:calc(100% - 16px);background:#101317e8;backdrop-filter:blur(12px)}.right-panel .panel-label,.right-panel section:nth-of-type(3){display:none}.right-panel section{padding:12px}.webgl{display:none}.brand small{display:none}.top-actions{gap:8px}footer>div:last-child{display:none}}
+@media(max-width:620px){.app-shell{grid-template-rows:58px minmax(0,1fr) 30px}.workspace{display:block;position:relative}.viewport{height:100%}.right-panel{position:absolute;right:8px;top:8px;width:200px;max-height:calc(100% - 16px);background:#101317e8;backdrop-filter:blur(12px)}.app-shell.light .right-panel{background:#fffffff0}.right-panel .panel-label,.right-panel section:nth-of-type(3){display:none}.right-panel section{padding:12px}.webgl{display:none}.brand small{display:none}.top-actions{gap:8px}footer>div:last-child{display:none}}

@@ -14,6 +14,7 @@ type SceneApi = {
   setWireframe: (value: boolean) => void;
   setAutoRotate: (value: boolean) => void;
   setPerspective: (value: boolean) => void;
+  setLightBackground: (value: boolean) => void;
   setView: (preset: ViewPreset) => void;
   setExposure: (value: number) => void;
   setLayerVisible: (id: string, value: boolean) => void;
@@ -51,6 +52,7 @@ export function GLTFViewer() {
   const [wireframe, setWireframe] = useState(false);
   const [autoRotate, setAutoRotate] = useState(false);
   const [perspective, setPerspective] = useState(false);
+  const [lightBackground, setLightBackground] = useState(false);
   const [activeView, setActiveView] = useState<ViewPreset | null>(null);
   const [exposure, setExposure] = useState(1.15);
   const [dragging, setDragging] = useState(false);
@@ -96,8 +98,10 @@ export function GLTFViewer() {
 
     const scene = new THREE.Scene();
     scene.up.set(0, 0, 1);
-    scene.background = new THREE.Color(0x090b0d);
-    scene.fog = new THREE.FogExp2(0x090b0d, 0.038);
+    const darkBackground = new THREE.Color(0x090b0d);
+    const lightBackgroundColor = new THREE.Color(0xf4f5f7);
+    scene.background = darkBackground.clone();
+    scene.fog = new THREE.FogExp2(darkBackground, 0.038);
     const perspectiveFov = 38;
     let viewportAspect = 1;
     let camera: THREE.PerspectiveCamera | THREE.OrthographicCamera = new THREE.OrthographicCamera(-2.5 * viewportAspect, 2.5 * viewportAspect, 2.5, -2.5, .05, 100);
@@ -203,7 +207,8 @@ export function GLTFViewer() {
 
     const gridHelper = new THREE.GridHelper(30, 30, 0x343942, 0x1d2127);
     gridHelper.rotation.x = Math.PI / 2; gridHelper.position.z = -1.7; scene.add(gridHelper);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(10, 64), new THREE.MeshStandardMaterial({ color: 0x0c0e11, roughness: .88, metalness: .1 }));
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x0c0e11, roughness: .88, metalness: .1 });
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(10, 64), floorMaterial);
     floor.position.z = -1.72; floor.receiveShadow = true; scene.add(floor);
 
     const root = new THREE.Group();
@@ -314,6 +319,15 @@ export function GLTFViewer() {
         if (value) { viewTransition = null; setActiveView(null); }
       },
       setPerspective(value) { changeProjection(value); },
+      setLightBackground(value) {
+        const color = value ? lightBackgroundColor : darkBackground;
+        scene.background = color.clone();
+        if (scene.fog instanceof THREE.FogExp2) scene.fog.color.copy(color);
+        floorMaterial.color.setHex(value ? 0xf8f9fb : 0x0c0e11);
+        floorMaterial.roughness = value ? .96 : .88;
+        floorMaterial.metalness = value ? 0 : .1;
+        floorMaterial.needsUpdate = true;
+      },
       setView(preset) { changeView(preset); },
       setExposure(value) { renderer.toneMappingExposure = value; },
       setLayerVisible(id, value) {
@@ -364,6 +378,7 @@ export function GLTFViewer() {
   const toggleWire = () => setWireframe(v => { api.current?.setWireframe(!v); return !v; });
   const toggleRotate = () => setAutoRotate(v => { api.current?.setAutoRotate(!v); return !v; });
   const togglePerspective = () => setPerspective(v => { api.current?.setPerspective(!v); return !v; });
+  const toggleLightBackground = () => setLightBackground(v => { api.current?.setLightBackground(!v); return !v; });
   const selectView = (preset: ViewPreset) => {
     setAutoRotate(false);
     api.current?.setAutoRotate(false);
@@ -384,7 +399,7 @@ export function GLTFViewer() {
   };
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${lightBackground ? "light" : ""}`}>
       <header>
         <div className="brand"><span className="brand-mark">G</span><div><strong>GLTF LAB</strong><small>REALTIME MODEL VIEWER</small></div></div>
         <div className="top-actions"><span className="webgl"><i /> WEBGL 2.0</span><button className="open-button" onClick={() => inputRef.current?.click()}>＋ OPEN MODEL</button></div>
@@ -418,7 +433,7 @@ export function GLTFViewer() {
           onDragLeave={() => setDragging(false)}
           onDrop={(e) => { e.preventDefault(); setDragging(false); loadFile(e.dataTransfer.files[0]); }}>
           <canvas ref={canvasRef} aria-label="3D model viewport" />
-          <div className="viewport-top"><button aria-pressed={perspective} onClick={togglePerspective}>{perspective ? "PERSPECTIVE" : "ORTHOGRAPHIC"}</button><span>SHADED</span></div>
+          <div className="viewport-top"><button aria-pressed={perspective} onClick={togglePerspective}>{perspective ? "PERSPECTIVE" : "ORTHOGRAPHIC"}</button><button aria-pressed={lightBackground} onClick={toggleLightBackground}>{lightBackground ? "DARK BG" : "LIGHT BG"}</button><span>SHADED</span></div>
           <div className="axis" aria-label="Z-up coordinate system"><b className="z">Z</b><b className="x">X</b><b className="y">Y</b></div>
           <div className="view-presets" aria-label="View from axis direction">
             {(["+X", "-X", "+Y", "-Y", "+Z", "-Z"] as ViewPreset[]).map((preset) => (
@@ -433,7 +448,7 @@ export function GLTFViewer() {
 
         <aside className="right-panel">
           <div className="panel-label">INSPECTOR</div>
-          <section><h3>DISPLAY</h3><Toggle label="Perspective" active={perspective} onClick={togglePerspective}/><Toggle label="Grid floor" active={grid} onClick={toggleGrid}/><Toggle label="Wireframe" active={wireframe} onClick={toggleWire}/><Toggle label="Auto rotate" active={autoRotate} onClick={toggleRotate}/></section>
+          <section><h3>DISPLAY</h3><Toggle label="Perspective" active={perspective} onClick={togglePerspective}/><Toggle label="Light background" active={lightBackground} onClick={toggleLightBackground}/><Toggle label="Grid floor" active={grid} onClick={toggleGrid}/><Toggle label="Wireframe" active={wireframe} onClick={toggleWire}/><Toggle label="Auto rotate" active={autoRotate} onClick={toggleRotate}/></section>
           <section><h3>LIGHTING</h3><label className="range-label"><span>Exposure</span><output>{exposure.toFixed(2)}</output></label><input type="range" min="0.35" max="2.2" step="0.05" value={exposure} onChange={(e) => { const v = +e.target.value; setExposure(v); api.current?.setExposure(v); }}/><div className="environment"><span className="env-preview"/><div><b>STUDIO SOFT</b><small>Neutral HDRI</small></div><button>›</button></div></section>
           <section><h3>MODEL INFO</h3><dl><div><dt>Format</dt><dd>{meta.includes("GLTF") ? "glTF 2.0" : meta.includes("GLB") ? "Binary glTF" : "Generated"}</dd></div><div><dt>Up axis</dt><dd>Z</dd></div><div><dt>Triangles</dt><dd>{triangles}</dd></div><div><dt>Renderer</dt><dd>WebGL</dd></div></dl></section>
           <button className="reset-button" onClick={() => api.current?.reset()}>RESET CAMERA <span>R</span></button>

@@ -52,7 +52,7 @@ export function GLTFViewer() {
   const [wireframe, setWireframe] = useState(false);
   const [autoRotate, setAutoRotate] = useState(false);
   const [perspective, setPerspective] = useState(false);
-  const [lightBackground, setLightBackground] = useState(false);
+  const [lightBackground, setLightBackground] = useState(true);
   const [activeView, setActiveView] = useState<ViewPreset | null>(null);
   const [exposure, setExposure] = useState(1.15);
   const [dragging, setDragging] = useState(false);
@@ -100,8 +100,8 @@ export function GLTFViewer() {
     scene.up.set(0, 0, 1);
     const darkBackground = new THREE.Color(0x090b0d);
     const lightBackgroundColor = new THREE.Color(0xf4f5f7);
-    scene.background = darkBackground.clone();
-    scene.fog = new THREE.FogExp2(darkBackground, 0.038);
+    scene.background = lightBackgroundColor.clone();
+    scene.fog = new THREE.FogExp2(lightBackgroundColor, 0.038);
     const perspectiveFov = 38;
     let viewportAspect = 1;
     let camera: THREE.PerspectiveCamera | THREE.OrthographicCamera = new THREE.OrthographicCamera(-2.5 * viewportAspect, 2.5 * viewportAspect, 2.5, -2.5, .05, 100);
@@ -207,7 +207,7 @@ export function GLTFViewer() {
 
     const gridHelper = new THREE.GridHelper(30, 30, 0x343942, 0x1d2127);
     gridHelper.rotation.x = Math.PI / 2; gridHelper.position.z = -1.7; scene.add(gridHelper);
-    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x0c0e11, roughness: .88, metalness: .1 });
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xf8f9fb, roughness: .96, metalness: 0 });
     const floor = new THREE.Mesh(new THREE.CircleGeometry(10, 64), floorMaterial);
     floor.position.z = -1.72; floor.receiveShadow = true; scene.add(floor);
 

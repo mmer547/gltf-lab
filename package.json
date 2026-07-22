@@ -1,6 +1,6 @@
 {
   "name": "gltf-lab",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Z-up GLTF model viewer",
   "author": "GLTF Lab contributors",
   "main": "desktop/main.cjs",

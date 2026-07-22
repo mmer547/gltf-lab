@@ -45,6 +45,7 @@ export function GLTFViewer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const api = useRef<SceneApi | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dragDepthRef = useRef(0);
   const [name, setName] = useState("AURORA KNOT");
   const [meta, setMeta] = useState("PROCEDURAL SCENE");
   const [triangles, setTriangles] = useState("48.0K");
@@ -428,9 +429,14 @@ export function GLTFViewer() {
         </aside>
 
         <div className={`viewport ${dragging ? "dragging" : ""}`}
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setDragging(false); loadFile(e.dataTransfer.files[0]); }}>
+          onDragEnter={(e) => { e.preventDefault(); dragDepthRef.current += 1; setDragging(true); }}
+          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+            if (dragDepthRef.current === 0) setDragging(false);
+          }}
+          onDrop={(e) => { e.preventDefault(); dragDepthRef.current = 0; setDragging(false); loadFile(e.dataTransfer.files[0]); }}>
           <canvas ref={canvasRef} aria-label="3D model viewport" />
           <div className="viewport-top"><button aria-pressed={perspective} onClick={togglePerspective}>{perspective ? "PERSPECTIVE" : "ORTHOGRAPHIC"}</button><button aria-pressed={lightBackground} onClick={toggleLightBackground}>{lightBackground ? "DARK BG" : "LIGHT BG"}</button><span>SHADED</span></div>
           <div className="axis" aria-label="Z-up coordinate system"><b className="z">Z</b><b className="x">X</b><b className="y">Y</b></div>

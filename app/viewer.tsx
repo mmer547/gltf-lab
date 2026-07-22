@@ -116,8 +116,7 @@ export function GLTFViewer() {
     } | null = null;
     const createControls = (activeCamera: THREE.PerspectiveCamera | THREE.OrthographicCamera, target = new THREE.Vector3(), autoRotate = false) => {
       const nextControls = new OrbitControls(activeCamera, canvas);
-      nextControls.enableDamping = true;
-      nextControls.dampingFactor = .06;
+      nextControls.enableDamping = false;
       nextControls.autoRotate = autoRotate;
       nextControls.autoRotateSpeed = .65;
       nextControls.target.copy(target);
